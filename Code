@@ -1,0 +1,3039 @@
+<template>
+  <div class="dashboard-container">
+    <!-- 顶部核心指标卡片 -->
+    <el-row :gutter="20" class="kpi-cards">
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover">
+          <div class="kpi-card-content">
+            <div class="kpi-icon" style="background-color: #eef6ff;">
+              <el-icon color="#409EFF" :size="32"><TrendCharts /></el-icon>
+            </div>
+            <div class="kpi-text">
+              <div class="kpi-label">总贸易额 (亿美元)</div>
+              <div class="kpi-value">{{ kpiData.totalTradeVolume.toLocaleString() }}</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover">
+          <div class="kpi-card-content">
+            <div class="kpi-icon" style="background-color: #eefaf6;">
+              <el-icon color="#67C23A" :size="32"><Aim /></el-icon>
+            </div>
+            <div class="kpi-text">
+              <div class="kpi-label">预测模型准确率</div>
+              <div class="kpi-value">{{ kpiData.predictionAccuracy }}%</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover">
+          <div class="kpi-card-content">
+            <div class="kpi-icon" style="background-color: #fef5e9;">
+               <el-icon color="#E6A23C" :size="32"><Van /></el-icon>
+            </div>
+            <div class="kpi-text">
+              <div class="kpi-label">供应链效率指数</div>
+              <div class="kpi-value">{{ kpiData.supplyChainEfficiency }}</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :sm="12" :lg="6">
+        <el-card shadow="hover">
+          <div class="kpi-card-content">
+            <div class="kpi-icon" style="background-color: #fdefee;">
+              <el-icon color="#F56C6C" :size="32"><WarningFilled /></el-icon>
+            </div>
+            <div class="kpi-text">
+              <div class="kpi-label">当前风险预警数</div>
+              <div class="kpi-value">{{ kpiData.activeRisks }}</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+    <!-- 中部图表区域 -->
+    <el-row :gutter="20">
+      <!-- 贸易数据分析与市场趋势洞察 -->
+      <el-col :xs="24" :lg="16">
+        <el-card shadow="hover">
+          <div ref="tradeTrendChart" style="width: 100%; height: 400px;"></div>
+        </el-card>
+      </el-col>
+      <el-col :xs="24" :lg="8">
+        <el-card shadow="hover">
+          <div ref="marketShareChart" style="width: 100%; height: 400px;"></div>
+        </el-card>
+      </el-col>
+    </el-row>
+    <!-- 底部区域 -->
+    <el-row :gutter="20">
+      <!-- 供应链优化 -->
+      <el-col :xs="24" :lg="8">
+        <el-card shadow="hover">
+          <div ref="supplyChainGaugeChart" style="width: 100%; height: 420px;"></div>
+        </el-card>
+      </el-col>
+      <!-- 风险预警系统 -->
+      <el-col :xs="24" :lg="16">
+        <el-card shadow="hover">
+          <div class="risk-warning-header">
+             <el-text tag="b" size="large">最新风险预警</el-text>
+          </div>
+          <el-timeline class="risk-timeline">
+            <el-timeline-item
+              v-for="(item, index) in riskWarnings"
+              :key="index"
+              :timestamp="item.timestamp"
+              :type="item.type"
+              placement="top"
+            >
+              <el-card>
+                <h4>{{ item.title }}</h4>
+                <p>{{ item.content }}</p>
+              </el-card>
+            </el-timeline-item>
+          </el-timeline>
+        </el-card>
+      </el-col>
+    </el-row>
+  </div>
+</template>
+<script setup>
+import { onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import * as echarts from 'echarts';
+import { TrendCharts, Aim, Van, WarningFilled } from '@element-plus/icons-vue';
+// DOM 元素引用
+const tradeTrendChart = ref(null);
+const marketShareChart = ref(null);
+const supplyChainGaugeChart = ref(null);
+// ECharts 实例
+let tradeTrendChartInstance = null;
+let marketShareChartInstance = null;
+let supplyChainGaugeChartInstance = null;
+// 核心指标数据
+const kpiData = reactive({
+  totalTradeVolume: 0,
+  predictionAccuracy: 0,
+  supplyChainEfficiency: 0,
+  activeRisks: 0,
+});
+// 风险预警数据
+const riskWarnings = reactive([]);
+// 获取KPI数据
+const fetchKPIData = async () => {
+  try {
+    const response = await axios.get('/api/dashboard/kpi');
+    Object.assign(kpiData, response.data);
+  } catch (error) {
+    console.error('Failed to fetch KPI data:', error);
+  }
+};
+// 获取风险预警数据
+const fetchRiskWarnings = async () => {
+  try {
+    const response = await axios.get('/api/dashboard/risk-warnings');
+    riskWarnings.splice(0, riskWarnings.length, ...response.data);
+  } catch (error) {
+    console.error('Failed to fetch risk warnings:', error);
+  }
+};
+// 获取图表数据
+const fetchChartData = async () => {
+  try {
+    const [tradeTrendRes, marketShareRes] = await Promise.all([
+      axios.get('/api/dashboard/trade-trend'),
+      axios.get('/api/dashboard/market-share')
+    ]);
+    if (tradeTrendChartInstance) {
+      tradeTrendChartInstance.setOption(tradeTrendRes.data);
+    }
+    if (marketShareChartInstance) {
+      marketShareChartInstance.setOption(marketShareRes.data);
+    }
+  } catch (error) {
+    console.error('Failed to fetch chart data:', error);
+  }
+};
+// 初始化所有图表
+const initCharts = () => {
+  // 1. 贸易数据分析: 进出口趋势图 (折线+柱状混合图)
+  if (tradeTrendChart.value) {
+    tradeTrendChartInstance = echarts.init(tradeTrendChart.value);
+  }
+  // 2. 市场趋势洞察: 主要市场份额 (饼图)
+  if (marketShareChart.value) {
+    marketShareChartInstance = echarts.init(marketShareChart.value);
+  }
+  // 3. 供应链优化: 综合健康度 (仪表盘)
+  if (supplyChainGaugeChart.value) {
+    supplyChainGaugeChartInstance = echarts.init(supplyChainGaugeChart.value);
+    const supplyChainGaugeOption = {
+      title: {
+        text: '供应链优化：综合健康度',
+        left: 'center',
+      },
+      series: [
+        {
+          type: 'gauge',
+          center: ['50%', '60%'],
+          axisLine: {
+            lineStyle: {
+              width: 30,
+              color: [
+                [0.3, '#fd666d'],
+                [0.7, '#fddd60'],
+                [1, '#58d9f9']
+              ]
+            }
+          },
+          pointer: {
+            itemStyle: {
+              color: 'auto'
+            }
+          },
+          axisTick: {
+            distance: -30,
+            length: 8,
+            lineStyle: {
+              color: '#fff',
+              width: 2
+            }
+          },
+          splitLine: {
+            distance: -30,
+            length: 30,
+            lineStyle: {
+              color: '#fff',
+              width: 4
+            }
+          },
+          axisLabel: {
+            color: 'inherit',
+            distance: 40,
+            fontSize: 14
+          },
+          detail: {
+            valueAnimation: true,
+            formatter: '{value}',
+            color: 'inherit',
+            fontSize: 28
+          },
+          data: [
+            {
+              value: kpiData.supplyChainEfficiency,
+              name: '健康度指数'
+            }
+          ]
+        }
+      ]
+    };
+    supplyChainGaugeChartInstance.setOption(supplyChainGaugeOption);
+  }
+};
+// 处理窗口大小变化，使图表自适应
+const handleResize = () => {
+  tradeTrendChartInstance?.resize();
+  marketShareChartInstance?.resize();
+  supplyChainGaugeChartInstance?.resize();
+};
+onMounted(async () => {
+  await Promise.all([
+    fetchKPIData(),
+    fetchRiskWarnings(),
+    fetchChartData()
+  ]);
+  initCharts();
+  window.addEventListener('resize', handleResize);
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize);
+  tradeTrendChartInstance?.dispose();
+  marketShareChartInstance?.dispose();
+  supplyChainGaugeChartInstance?.dispose();
+});
+</script>
+<style scoped>
+.dashboard-container {
+  padding: 20px;
+  background-color: #f0f2f5;
+  min-height: calc(100vh - 50px);
+}
+.el-row {
+  margin-bottom: 20px;
+}
+.el-row:last-child {
+  margin-bottom: 0;
+}
+.kpi-cards .el-card {
+  border: none;
+}
+.kpi-card-content {
+  display: flex;
+  align-items: center;
+}
+.kpi-icon {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  margin-right: 16px;
+}
+.kpi-text {
+  display: flex;
+  flex-direction: column;
+}
+.kpi-label {
+  font-size: 14px;
+  color: #606266;
+  margin-bottom: 8px;
+}
+.kpi-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #303133;
+}
+.risk-warning-header {
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #ebeef5;
+}
+.risk-timeline {
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 10px;
+}
+.risk-timeline::-webkit-scrollbar {
+  width: 6px;
+}
+.risk-timeline::-webkit-scrollbar-thumb {
+  background: #ddd;
+  border-radius: 10px;
+}
+.risk-timeline::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+@media (max-width: 768px) {
+  .kpi-label {
+    font-size: 12px;
+  }
+  .kpi-value {
+    font-size: 20px;
+  }
+  .kpi-icon {
+    width: 50px;
+    height: 50px;
+  }
+}
+</style>
+<template>
+  <div class="overview-container">
+    <!-- 模块标题 -->
+    <h2 class="main-title">贸易数据分析总览</h2>
+    <!-- 1. 核心数据指标 (KPIs) -->
+    <el-row :gutter="20" class="kpi-row">
+      <el-col :xs="12" :sm="12" :md="8" :lg="4" v-for="kpi in kpiData" :key="kpi.title">
+        <el-card shadow="hover">
+          <div class="kpi-card">
+            <div class="kpi-title">{{ kpi.title }}</div>
+            <div class="kpi-value">{{ kpi.value }}<span class="kpi-unit">{{ kpi.unit }}</span></div>
+            <div class="kpi-footer">
+              <span>同比增长 <span :class="kpi.yoy > 0 ? 'text-success' : 'text-danger'">{{ kpi.yoy }}%</span></span>
+              <span>环比增长 <span :class="kpi.mom > 0 ? 'text-success' : 'text-danger'">{{ kpi.mom }}%</span></span>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+    <!-- 2 & 3. 趋势图与伙伴国分布 -->
+    <el-row :gutter="20" class="chart-row">
+      <!-- 月度贸易额趋势图 -->
+      <el-col :xs="24" :sm="24" :md="14" :lg="15">
+        <el-card shadow="hover">
+          <template #header>
+            <div class="card-header">
+              <span>月度贸易额趋势</span>
+            </div>
+          </template>
+          <div ref="monthlyTrendChartRef" style="height: 400px;"></div>
+        </el-card>
+      </el-col>
+      <!-- 主要贸易伙伴国分布图 -->
+      <el-col :xs="24" :sm="24" :md="10" :lg="9">
+        <el-card shadow="hover">
+          <template #header>
+            <div class="card-header">
+              <span>TOP 10 贸易伙伴国</span>
+            </div>
+          </template>
+          <div ref="tradePartnersChartRef" style="height: 400px;"></div>
+        </el-card>
+      </el-col>
+    </el-row>
+    <!-- 4 & 5. 品类占比与热门商品排行 -->
+    <el-row :gutter="20" class="chart-row">
+      <!-- 商品品类进出口占比 -->
+      <el-col :xs="24" :sm="24" :md="8" :lg="8">
+        <el-card shadow="hover">
+          <template #header>
+            <div class="card-header">
+              <span>商品品类进出口占比</span>
+            </div>
+          </template>
+          <div ref="categoryPieChartRef" style="height: 400px;"></div>
+        </el-card>
+      </el-col>
+      <!-- 热门进出口商品排行 -->
+      <el-col :xs="24" :sm="24" :md="16" :lg="16">
+        <el-card shadow="hover">
+          <template #header>
+            <div class="card-header">
+              <span>热门进出口商品排行</span>
+            </div>
+          </template>
+          <el-row :gutter="5">
+            <el-col :span="12">
+              <div class="sub-chart-title">TOP 10 进口商品</div>
+              <div ref="topImportsChartRef" style="height: 360px;"></div>
+            </el-col>
+            <el-col :span="12">
+              <div class="sub-chart-title">TOP 10 出口商品</div>
+              <div ref="topExportsChartRef" style="height: 360px;"></div>
+            </el-col>
+          </el-row>
+        </el-card>
+      </el-col>
+    </el-row>
+  </div>
+</template>
+<script setup>
+import {onMounted, reactive, ref, onUnmounted} from "vue";
+import * as echarts from 'echarts';
+import { ElMessage } from 'element-plus';
+import axios from 'axios';
+// --- 数据状态 ---
+const kpiData = reactive([]);
+// --- ECharts 图表引用和实例 ---
+const monthlyTrendChartRef = ref(null);
+const tradePartnersChartRef = ref(null);
+const categoryPieChartRef = ref(null);
+const topImportsChartRef = ref(null);
+const topExportsChartRef = ref(null);
+let chartInstances = [];
+// --- API 请求函数 ---
+const fetchKPIData = async () => {
+  try {
+    const response = await axios.get('/api/trade/kpi');
+    Object.assign(kpiData, response.data);
+  } catch (error) {
+    ElMessage.error('获取核心指标数据失败');
+    console.error('Error fetching KPI data:', error);
+  }
+};
+const fetchMonthlyTrendData = async () => {
+  try {
+    const response = await axios.get('/api/trade/monthly-trend');
+    if (monthlyTrendChartRef.value) {
+      const chart = echarts.init(monthlyTrendChartRef.value);
+      chart.setOption({
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: {
+            type: 'cross',
+            label: {
+              backgroundColor: '#6a7985'
+            }
+          }
+        },
+        legend: {
+          data: ['出口额', '进口额'],
+          textStyle: { color: '#666' }
+        },
+        grid: {
+          left: '3%',
+          right: '4%',
+          bottom: '3%',
+          containLabel: true
+        },
+        xAxis: [
+          {
+            type: 'category',
+            boundaryGap: false,
+            data: response.data.months
+          }
+        ],
+        yAxis: [
+          {
+            type: 'value',
+            name: '金额(亿美元)',
+            axisLine: { show: true },
+            splitLine: { show: true, lineStyle: { type: 'dashed' } }
+          }
+        ],
+        series: [
+          {
+            name: '出口额',
+            type: 'line',
+            smooth: true,
+            areaStyle: {
+              opacity: 0.2,
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{
+                offset: 0, color: '#5470C6'
+              }, {
+                offset: 1, color: '#91CC75'
+              }])
+            },
+            emphasis: {
+              focus: 'series'
+            },
+            data: response.data.exports
+          },
+          {
+            name: '进口额',
+            type: 'line',
+            smooth: true,
+            areaStyle: {
+              opacity: 0.2,
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{
+                offset: 0, color: '#FAC858'
+              }, {
+                offset: 1, color: '#EE6666'
+              }])
+            },
+            emphasis: {
+              focus: 'series'
+            },
+            data: response.data.imports
+          }
+        ]
+      });
+      chartInstances.push(chart);
+    }
+  } catch (error) {
+    ElMessage.error('获取月度趋势数据失败');
+    console.error('Error fetching monthly trend data:', error);
+  }
+};
+const fetchTradePartnersData = async () => {
+  try {
+    const response = await axios.get('/api/trade/partners');
+    if (tradePartnersChartRef.value) {
+      const chart = echarts.init(tradePartnersChartRef.value);
+      chart.setOption({
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'shadow' }
+        },
+        grid: {
+          left: '3%',
+          right: '4%',
+          bottom: '3%',
+          containLabel: true
+        },
+        xAxis: {
+          type: 'value',
+          boundaryGap: [0, 0.01],
+          name: '贸易额(亿美元)'
+        },
+        yAxis: {
+          type: 'category',
+          data: response.data.countries.reverse()
+        },
+        series: [
+          {
+            name: '贸易额',
+            type: 'bar',
+            data: response.data.values.reverse()
+          }
+        ]
+      });
+      chartInstances.push(chart);
+    }
+  } catch (error) {
+    ElMessage.error('获取贸易伙伴数据失败');
+    console.error('Error fetching trade partners data:', error);
+  }
+};
+const fetchCategoryData = async () => {
+  try {
+    const response = await axios.get('/api/trade/categories');
+    if (categoryPieChartRef.value) {
+      const chart = echarts.init(categoryPieChartRef.value);
+      chart.setOption({
+        tooltip: {
+          trigger: 'item',
+          formatter: '{a} <br/>{b} : {c}亿美元 ({d}%)'
+        },
+        legend: {
+          orient: 'vertical',
+          left: 'left',
+          top: 'middle'
+        },
+        series: [
+          {
+            name: '商品品类',
+            type: 'pie',
+            radius: ['45%', '70%'],
+            center: ['65%', '50%'],
+            avoidLabelOverlap: false,
+            label: {
+              show: false,
+              position: 'center'
+            },
+            emphasis: {
+              label: {
+                show: true,
+                fontSize: '20',
+                fontWeight: 'bold'
+              }
+            },
+            labelLine: {
+              show: false
+            },
+            data: response.data
+          }
+        ]
+      });
+      chartInstances.push(chart);
+    }
+  } catch (error) {
+    ElMessage.error('获取商品品类数据失败');
+    console.error('Error fetching category data:', error);
+  }
+};
+const fetchTopProductsData = async () => {
+  try {
+    const response = await axios.get('/api/trade/top-products');
+    const commonOption = {
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+      xAxis: { type: 'value', name: '交易额(亿美元)', nameTextStyle: { align: 'center' }, boundaryGap: [0, 0.01] },
+      yAxis: { type: 'category', axisLabel: { interval: 0, rotate: 0 } },
+      series: [{ name: '交易额', type: 'bar' }]
+    };
+    if (topImportsChartRef.value) {
+      const importChart = echarts.init(topImportsChartRef.value);
+      const importOption = JSON.parse(JSON.stringify(commonOption));
+      importOption.yAxis.data = response.data.imports.products.reverse();
+      importOption.series[0].data = response.data.imports.values.reverse();
+      importChart.setOption(importOption);
+      chartInstances.push(importChart);
+    }
+    if (topExportsChartRef.value) {
+      const exportChart = echarts.init(topExportsChartRef.value);
+      const exportOption = JSON.parse(JSON.stringify(commonOption));
+      exportOption.yAxis.data = response.data.exports.products.reverse();
+      exportOption.series[0].data = response.data.exports.values.reverse();
+      exportChart.setOption(exportOption);
+      chartInstances.push(exportChart);
+    }
+  } catch (error) {
+    ElMessage.error('获取热门商品数据失败');
+    console.error('Error fetching top products data:', error);
+  }
+};
+const handleResize = () => {
+  chartInstances.forEach(chart => {
+    chart.resize();
+  });
+};
+onMounted(async () => {
+  // 获取所有数据
+  await Promise.all([
+    fetchKPIData(),
+    fetchMonthlyTrendData(),
+    fetchTradePartnersData(),
+    fetchCategoryData(),
+    fetchTopProductsData()
+  ]);
+  // 监听窗口大小变化以实现图表自适应
+  window.addEventListener('resize', handleResize);
+});
+onUnmounted(() => {
+  // 组件卸载时销毁图表实例并移除监听
+  window.removeEventListener('resize', handleResize);
+  chartInstances.forEach(chart => {
+    chart.dispose();
+  });
+});
+</script>
+<style scoped>
+.overview-container {
+  padding: 20px;
+  background-color: #f0f2f5;
+  min-height: 100vh;
+}
+.main-title {
+  font-size: 24px;
+  color: #333;
+  margin-bottom: 20px;
+}
+.kpi-row {
+  margin-bottom: 20px;
+}
+.chart-row {
+  margin-bottom: 20px;
+}
+.kpi-card {
+  color: #333;
+}
+.kpi-title {
+  font-size: 14px;
+  color: #888;
+  margin-bottom: 8px;
+}
+.kpi-value {
+  font-size: 28px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+.kpi-unit {
+  font-size: 14px;
+  margin-left: 5px;
+  font-weight: normal;
+}
+.kpi-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #666;
+  border-top: 1px solid #eee;
+  padding-top: 8px;
+  margin-top: 8px;
+}
+.text-success {
+  color: #67c23a;
+}
+.text-danger {
+  color: #f56c6c;
+}
+.card-header {
+  font-weight: bold;
+}
+.sub-chart-title{
+  text-align: center;
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 5px;
+}
+.el-card {
+  border: none;
+  border-radius: 4px;
+}
+</style>
+<template>
+  <el-container class="monitoring-container">
+    <el-header class="monitoring-header">
+      <div class="header-title">模型效果监控</div>
+      <div class="model-selector">
+        <el-select v-model="selectedModel" placeholder="请选择模型" size="large" style="width: 280px;">
+          <el-option
+              v-for="item in modelOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+          />
+        </el-select>
+      </div>
+    </el-header>
+    <el-main class="monitoring-main">
+      <!-- 关键性能指标 -->
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <el-card shadow="hover">
+            <div class="kpi-card">
+              <div class="kpi-title">模型准确率 (Accuracy)</div>
+              <div ref="accuracyGaugeRef" class="kpi-chart"></div>
+            </div>
+          </el-card>
+        </el-col>
+        <el-col :span="8">
+          <el-card shadow="hover">
+            <div class="kpi-card digital-card">
+              <div class="kpi-title">平均绝对误差 (MAE)</div>
+              <div class="kpi-value">{{ currentModelData.kpi.mae }}</div>
+              <div class="kpi-desc">数值越小, 模型越优</div>
+            </div>
+          </el-card>
+        </el-col>
+        <el-col :span="8">
+          <el-card shadow="hover">
+            <div class="kpi-card digital-card">
+              <div class="kpi-title">均方根误差 (RMSE)</div>
+              <div class="kpi-value">{{ currentModelData.kpi.rmse }}</div>
+              <div class="kpi-desc">对大误差更敏感</div>
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
+      <!-- 预测值与实际值对比趋势 -->
+      <el-row :gutter="20" style="margin-top: 20px;">
+        <el-col :span="24">
+          <el-card shadow="hover">
+            <div class="chart-title">预测值与实际值对比趋势</div>
+            <div ref="trendLineChartRef" class="main-chart"></div>
+          </el-card>
+        </el-col>
+      </el-row>
+      <!-- 影响因子与误差分布 -->
+      <el-row :gutter="20" style="margin-top: 20px;">
+        <el-col :span="12">
+          <el-card shadow="hover">
+            <div class="chart-title">模型关键影响因子分析</div>
+            <div ref="featureBarChartRef" class="sub-chart"></div>
+          </el-card>
+        </el-col>
+        <el-col :span="12">
+          <el-card shadow="hover">
+            <div class="chart-title">预测误差分布图</div>
+            <div ref="errorHistogramChartRef" class="sub-chart"></div>
+          </el-card>
+        </el-col>
+      </el-row>
+    </el-main>
+  </el-container>
+</template>
+<script setup>
+import {onMounted, ref, watch, computed, nextTick, onBeforeUnmount} from "vue";
+import * as echarts from 'echarts';
+import axios from 'axios';
+// --- 状态管理 ---
+const selectedModel = ref('price_model');
+const modelOptions = ref([]);
+const allModelsData = ref({});
+const loading = ref(false);
+// 获取模型列表
+const fetchModelOptions = async () => {
+  try {
+    const response = await axios.get('/api/models');
+    modelOptions.value = response.data.map(model => ({
+      value: model.id,
+      label: model.name
+    }));
+  } catch (error) {
+    console.error('Failed to fetch model options:', error);
+  }
+};
+// 获取模型数据
+const fetchModelData = async (modelId) => {
+  loading.value = true;
+  try {
+    const response = await axios.get(`/api/model-data/${modelId}`);
+    allModelsData.value[modelId] = response.data;
+  } catch (error) {
+    console.error(`Failed to fetch data for model ${modelId}:`, error);
+  } finally {
+    loading.value = false;
+  }
+};
+// 初始化数据
+const initializeData = async () => {
+  await fetchModelOptions();
+  if (modelOptions.value.length > 0) {
+    selectedModel.value = modelOptions.value[0].value;
+    await fetchModelData(selectedModel.value);
+  }
+};
+const currentModelData = computed(() => {
+  return allModelsData.value[selectedModel.value] || {
+    kpi: { accuracy: 0, mae: 0, rmse: 0 },
+    trend: { dates: [], predictions: [], actuals: [] },
+    features: { names: [], importance: [] },
+    errors: []
+  };
+});
+// --- ECharts 实例引用 ---
+const accuracyGaugeRef = ref(null);
+const trendLineChartRef = ref(null);
+const featureBarChartRef = ref(null);
+const errorHistogramChartRef = ref(null);
+let accuracyGauge = null;
+let trendLineChart = null;
+let featureBarChart = null;
+let errorHistogramChart = null;
+// --- 初始化图表 ---
+const initCharts = () => {
+  // 1. 准确率仪表盘
+  if (accuracyGaugeRef.value) {
+    accuracyGauge = echarts.init(accuracyGaugeRef.value);
+    updateAccuracyGauge();
+  }
+  // 2. 趋势折线图
+  if (trendLineChartRef.value) {
+    trendLineChart = echarts.init(trendLineChartRef.value);
+    updateTrendLineChart();
+  }
+  // 3. 特征重要性条形图
+  if (featureBarChartRef.value) {
+    featureBarChart = echarts.init(featureBarChartRef.value);
+    updateFeatureBarChart();
+  }
+  // 4. 误差分布直方图
+  if (errorHistogramChartRef.value) {
+    errorHistogramChart = echarts.init(errorHistogramChartRef.value);
+    updateErrorHistogramChart();
+  }
+};
+// --- 更新图表函数 ---
+const updateAccuracyGauge = () => {
+  if (!accuracyGauge) return;
+  const option = {
+    series: [
+      {
+        type: 'gauge',
+        startAngle: 180,
+        endAngle: 0,
+        min: 0,
+        max: 1,
+        splitNumber: 5,
+        axisLine: {
+          lineStyle: {
+            width: 8,
+            color: [
+              [0.8, '#FF6E76'],
+              [0.95, '#FDDD60'],
+              [1, '#58D9A5']
+            ]
+          }
+        },
+        pointer: {
+          icon: 'path://M12.8,0.7l12,40.1H0.7L12.8,0.7z',
+          length: '12%',
+          width: 20,
+          offsetCenter: [0, '-60%'],
+          itemStyle: {
+            color: 'auto'
+          }
+        },
+        axisTick: { show: false },
+        splitLine: { show: false },
+        axisLabel: {
+          distance: 15,
+          color: '#999',
+          fontSize: 12
+        },
+        detail: {
+          valueAnimation: true,
+          formatter: '{value}',
+          color: 'auto',
+          fontSize: 30,
+          offsetCenter: [0, '0%']
+        },
+        data: [
+          {
+            value: currentModelData.value.kpi.accuracy,
+            name: 'Accuracy'
+          }
+        ]
+      }
+    ]
+  };
+  accuracyGauge.setOption(option);
+};
+const updateTrendLineChart = () => {
+  if (!trendLineChart) return;
+  const option = {
+    tooltip: {
+      trigger: 'axis'
+    },
+    legend: {
+      data: ['模型预测值', '真实历史值']
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: currentModelData.value.trend.dates
+    },
+    yAxis: {
+      type: 'value'
+    },
+    series: [
+      {
+        name: '模型预测值',
+        type: 'line',
+        smooth: true,
+        data: currentModelData.value.trend.predictions,
+        itemStyle: { color: '#3A84FF' }
+      },
+      {
+        name: '真实历史值',
+        type: 'line',
+        smooth: true,
+        data: currentModelData.value.trend.actuals,
+        itemStyle: { color: '#4BCB99' }
+      }
+    ]
+  };
+  trendLineChart.setOption(option);
+};
+const updateFeatureBarChart = () => {
+  if (!featureBarChart) return;
+  const sortedFeatures = currentModelData.value.features.names
+    .map((name, index) => ({
+      name: name,
+      value: currentModelData.value.features.importance[index]
+    }))
+    .sort((a, b) => a.value - b.value);
+  const option = {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' }
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'value',
+      boundaryGap: [0, 0.01]
+    },
+    yAxis: {
+      type: 'category',
+      data: sortedFeatures.map(item => item.name)
+    },
+    series: [
+      {
+        name: '重要性',
+        type: 'bar',
+        data: sortedFeatures.map(item => item.value),
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(1, 0, 0, 0, [
+            { offset: 0, color: '#83bff6' },
+            { offset: 1, color: '#188df0' }
+          ])
+        }
+      }
+    ]
+  };
+  featureBarChart.setOption(option);
+};
+const updateErrorHistogramChart = () => {
+    if (!errorHistogramChart) return;
+    const option = {
+        dataset: [{
+            source: currentModelData.value.errors.map(e => [e])
+        }, {
+            transform: {
+                type: 'ecStat:histogram',
+                config: {}
+            }
+        }],
+        tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' }
+        },
+        grid: {
+            left: '3%',
+            right: '4%',
+            bottom: '3%',
+            containLabel: true
+        },
+        xAxis: {
+            type: 'category',
+            name: '误差区间',
+            axisLabel: {
+                formatter: function (value) {
+                    return parseFloat(value).toFixed(2);
+                }
+            }
+        },
+        yAxis: {
+            type: 'value',
+            name: '频数'
+        },
+        series: {
+            name: '频数',
+            type: 'bar',
+            barWidth: '99.3%',
+            datasetIndex: 1,
+            itemStyle: {
+                color: '#5470c6'
+            }
+        }
+    };
+    errorHistogramChart.setOption(option);
+};
+// --- 监听模型变化 ---
+watch(selectedModel, (newModelId) => {
+  if (!allModelsData.value[newModelId]) {
+    fetchModelData(newModelId);
+  }
+  nextTick(() => {
+    updateAccuracyGauge();
+    updateTrendLineChart();
+    updateFeatureBarChart();
+    updateErrorHistogramChart();
+  });
+});
+// --- 窗口大小自适应 ---
+const resizeCharts = () => {
+  accuracyGauge?.resize();
+  trendLineChart?.resize();
+  featureBarChart?.resize();
+  errorHistogramChart?.resize();
+};
+// --- 生命周期钩子 ---
+onMounted(() => {
+  initializeData().then(() => {
+    nextTick(() => {
+      initCharts();
+      window.addEventListener('resize', resizeCharts);
+    });
+  });
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', resizeCharts);
+  accuracyGauge?.dispose();
+  trendLineChart?.dispose();
+  featureBarChart?.dispose();
+  errorHistogramChart?.dispose();
+});
+</script>
+<style scoped>
+.monitoring-container {
+  background-color: #f0f2f5;
+  height: 100%;
+  width: 100%;
+  padding: 20px;
+  box-sizing: border-box;
+}
+.monitoring-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 0;
+  height: auto;
+}
+.header-title {
+  font-size: 24px;
+  font-weight: bold;
+  color: #333;
+}
+.monitoring-main {
+  padding: 0;
+}
+.el-card {
+  border-radius: 8px;
+}
+.kpi-card {
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.digital-card {
+  align-items: center;
+}
+.kpi-title {
+  font-size: 16px;
+  color: #666;
+  text-align: center;
+  margin-bottom: 10px;
+}
+.kpi-value {
+  font-size: 40px;
+  font-weight: bold;
+  color: #333;
+  text-align: center;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+.kpi-desc {
+  font-size: 14px;
+  color: #999;
+  text-align: center;
+  margin-top: 10px;
+}
+.kpi-chart {
+  height: 100%;
+  width: 100%;
+}
+.chart-title {
+  font-size: 18px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 15px;
+}
+.main-chart {
+  height: 400px;
+}
+.sub-chart {
+  height: 350px;
+}
+</style>
+<template>
+  <div class="trend-dashboard-container">
+    <el-card shadow="never" class="page-header">
+      <h1 class="page-title">人工智能贸易决策平台 - 趋势分析仪表盘</h1>
+      <p class="page-subtitle">综合市场数据，洞察行业先机</p>
+    </el-card>
+    <el-row :gutter="20">
+      <!-- 市场热点词云 -->
+      <el-col :span="12">
+        <el-card class="chart-card" shadow="hover">
+          <template #header>
+            <div class="card-header">
+              <span>市场热点洞察</span>
+            </div>
+          </template>
+          <div ref="wordCloudChartRef" class="chart-container"></div>
+        </el-card>
+      </el-col>
+      <!-- 主要商品价格热力图 -->
+      <el-col :span="12">
+        <el-card class="chart-card" shadow="hover">
+          <template #header>
+            <div class="card-header">
+              <span>核心商品年度价格波动图</span>
+            </div>
+          </template>
+          <div ref="heatmapChartRef" class="chart-container"></div>
+        </el-card>
+      </el-col>
+    </el-row>
+    <el-row :gutter="20" style="margin-top: 20px;">
+      <!-- 竞品动态雷达分析图 -->
+      <el-col :span="12">
+        <el-card class="chart-card" shadow="hover">
+          <template #header>
+            <div class="card-header">
+              <span>多维竞争力雷达分析</span>
+            </div>
+          </template>
+          <div ref="radarChartRef" class="chart-container"></div>
+        </el-card>
+      </el-col>
+      <!-- 行业景气指数趋势 -->
+      <el-col :span="12">
+        <el-card class="chart-card" shadow="hover">
+          <template #header>
+            <div class="card-header">
+              <span>行业景气指数与历史趋势</span>
+            </div>
+          </template>
+          <div class="composite-chart-container">
+            <div ref="gaugeChartRef" class="gauge-chart"></div>
+            <div ref="lineChartRef" class="line-chart"></div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+  </div>
+</template>
+<script setup>
+import { onMounted, onBeforeUnmount, ref } from "vue";
+import * as echarts from 'echarts';
+import axios from 'axios';
+import 'echarts-wordcloud';
+// Chart Refs
+const wordCloudChartRef = ref(null);
+const heatmapChartRef = ref(null);
+const radarChartRef = ref(null);
+const gaugeChartRef = ref(null);
+const lineChartRef = ref(null);
+// Chart Instances
+let wordCloudChart = null;
+let heatmapChart = null;
+let radarChart = null;
+let gaugeChart = null;
+let lineChart = null;
+// API请求函数
+const fetchWordCloudData = async () => {
+  try {
+    const response = await axios.get('/api/market/hotwords');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching word cloud data:', error);
+    return [];
+  }
+};
+const fetchHeatmapData = async () => {
+  try {
+    const response = await axios.get('/api/commodity/prices');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching heatmap data:', error);
+    return [];
+  }
+};
+const fetchRadarData = async () => {
+  try {
+    const response = await axios.get('/api/competitor/analysis');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching radar data:', error);
+    return null;
+  }
+};
+const fetchIndustryIndex = async () => {
+  try {
+    const response = await axios.get('/api/industry/index');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching industry index:', error);
+    return { current: 0, history: [] };
+  }
+};
+// 初始化市场热点词云
+const initWordCloudChart = async () => {
+  if (wordCloudChartRef.value) {
+    wordCloudChart = echarts.init(wordCloudChartRef.value);
+    const wordData = await fetchWordCloudData();
+    const option = {
+      tooltip: {
+        show: true,
+        formatter: (params) => `热度: ${params.value}`
+      },
+      series: [{
+        type: 'wordCloud',
+        shape: 'circle',
+        gridSize: 8,
+        sizeRange: [14, 60],
+        rotationRange: [-90, 90],
+        rotationStep: 45,
+        drawOutOfBound: false,
+        textStyle: {
+          color: function () {
+            return 'rgb(' + [
+              Math.round(Math.random() * 160),
+              Math.round(Math.random() * 160),
+              Math.round(Math.random() * 160)
+            ].join(',') + ')';
+          }
+        },
+        emphasis: {
+          textStyle: {
+            shadowBlur: 10,
+            shadowColor: '#333'
+          }
+        },
+        data: wordData
+      }]
+    };
+    wordCloudChart.setOption(option);
+  }
+};
+// 初始化主要商品价格热力图
+const initHeatmapChart = async () => {
+  if (heatmapChartRef.value) {
+    heatmapChart = echarts.init(heatmapChartRef.value);
+    const heatmapData = await fetchHeatmapData();
+    const option = {
+      tooltip: {
+        trigger: 'item',
+        formatter: '{c0}<br/>价格指数: {c1}'
+      },
+      visualMap: {
+        min: 200,
+        max: 700,
+        type: 'piecewise',
+        orient: 'horizontal',
+        left: 'center',
+        top: 0,
+        pieces: [
+          { min: 600, label: '> 600 高价区', color: '#740001' },
+          { min: 500, max: 600, label: '500-600', color: '#ae0101' },
+          { min: 400, max: 500, label: '400-500', color: '#e04949' },
+          { min: 300, max: 500, label: '300-400', color: '#f59393' },
+          { min: 200, max: 300, label: '< 300 低价区', color: '#fed7d7' }
+        ]
+      },
+      calendar: {
+        top: 60,
+        left: 30,
+        right: 30,
+        cellSize: ['auto', 13],
+        range: new Date().getFullYear().toString(),
+        itemStyle: {
+          borderWidth: 0.5
+        },
+        yearLabel: { show: true }
+      },
+      series: {
+        type: 'heatmap',
+        coordinateSystem: 'calendar',
+        data: heatmapData
+      }
+    };
+    heatmapChart.setOption(option);
+  }
+};
+// 初始化竞品动态雷达分析图
+const initRadarChart = async () => {
+  if (radarChartRef.value) {
+    radarChart = echarts.init(radarChartRef.value);
+    const radarData = await fetchRadarData();
+    if (!radarData) return;
+    const option = {
+      tooltip: {
+        trigger: 'item'
+      },
+      legend: {
+        data: radarData.legend,
+        bottom: 5,
+      },
+      radar: {
+        indicator: radarData.indicators
+      },
+      series: [{
+        name: '竞争力对比',
+        type: 'radar',
+        data: radarData.seriesData.map(item => ({
+          ...item,
+          areaStyle: {
+            color: item.color || 'rgba(5, 144, 255, 0.4)'
+          }
+        }))
+      }]
+    };
+    radarChart.setOption(option);
+  }
+};
+// 初始化行业景气指数仪表盘
+const initGaugeChart = async () => {
+  if (gaugeChartRef.value) {
+    gaugeChart = echarts.init(gaugeChartRef.value);
+    const indexData = await fetchIndustryIndex();
+    const option = {
+      series: [{
+        type: 'gauge',
+        center: ['50%', '60%'],
+        startAngle: 200,
+        endAngle: -20,
+        min: 0,
+        max: 100,
+        splitNumber: 10,
+        progress: {
+          show: true,
+          width: 30,
+          itemStyle: {
+            color: '#58D9F9'
+          }
+        },
+        axisLine: {
+          lineStyle: {
+            width: 30,
+            color: [[1, '#E6EBF8']]
+          }
+        },
+        axisTick: {
+          show: false,
+        },
+        splitLine: {
+          show: false,
+        },
+        axisLabel: {
+          show: false,
+        },
+        pointer: {
+          show: false
+        },
+        title: {
+          offsetCenter: [0, '-10%'],
+          fontSize: 16,
+          color: '#666'
+        },
+        detail: {
+          valueAnimation: true,
+          fontSize: 30,
+          offsetCenter: [0, '-40%'],
+          formatter: '{value}',
+          color: '#333'
+        },
+        data: [{
+          value: indexData.current,
+          name: '当前行业景气指数'
+        }]
+      }]
+    };
+    gaugeChart.setOption(option);
+  }
+};
+// 初始化行业景气指数折线图
+const initLineChart = async () => {
+  if (lineChartRef.value) {
+    lineChart = echarts.init(lineChartRef.value);
+    const indexData = await fetchIndustryIndex();
+    const option = {
+      tooltip: {
+        trigger: 'axis'
+      },
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: indexData.history.map(item => item.date)
+      },
+      yAxis: {
+        type: 'value',
+        name: '指数值',
+        min: 50,
+        max: 90
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        containLabel: true
+      },
+      series: [{
+        name: '景气指数',
+        type: 'line',
+        smooth: true,
+        data: indexData.history.map(item => item.value),
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{
+            offset: 0,
+            color: 'rgba(88, 217, 249, 0.5)'
+          }, {
+            offset: 1,
+            color: 'rgba(88, 217, 249, 0)'
+          }])
+        }
+      }]
+    };
+    lineChart.setOption(option);
+  }
+};
+const resizeCharts = () => {
+  wordCloudChart?.resize();
+  heatmapChart?.resize();
+  radarChart?.resize();
+  gaugeChart?.resize();
+  lineChart?.resize();
+};
+onMounted(async () => {
+  await initWordCloudChart();
+  await initHeatmapChart();
+  await initRadarChart();
+  await initGaugeChart();
+  await initLineChart();
+  window.addEventListener('resize', resizeCharts);
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', resizeCharts);
+  wordCloudChart?.dispose();
+  heatmapChart?.dispose();
+  radarChart?.dispose();
+  gaugeChart?.dispose();
+  lineChart?.dispose();
+});
+</script>
+<style scoped>
+.trend-dashboard-container {
+  padding: 20px;
+  background-color: #f0f2f5;
+}
+.page-header {
+  margin-bottom: 20px;
+  border: none;
+}
+.page-title {
+  margin: 0;
+  font-size: 24px;
+  color: #333;
+}
+.page-subtitle {
+  margin: 5px 0 0 0;
+  font-size: 14px;
+  color: #888;
+}
+.chart-card {
+  border-radius: 8px;
+  border: none;
+}
+.card-header {
+  font-size: 16px;
+  font-weight: bold;
+}
+.chart-container {
+  width: 100%;
+  height: 400px;
+}
+.composite-chart-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 400px;
+}
+.gauge-chart {
+  width: 100%;
+  height: 50%;
+}
+.line-chart {
+  width: 100%;
+  height: 50%;
+}
+</style>
+from typing import List, Optional, Dict
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from com..domain import RiskAlertSystem
+from com..mapper import RiskAlertSystemMapper
+from com..service import IRiskAlertSystemService
+from com..service.impl import RiskAlertSystemServiceImpl
+class RiskAlertSystemHandler:
+    """
+    风险预警系统数据分析模块
+    """
+    def __init__(self, alertSystemMapper: RiskAlertSystemMapper):
+        """
+        构造函数，接收风险预警系统Mapper的实例
+        """
+        self.alertSystemMapper = alertSystemMapper
+        self.alertSystemService: IRiskAlertSystemService = RiskAlertSystemServiceImpl(alertSystemMapper)
+    def fetch_data(self) -> List[RiskAlertSystem]:
+        """
+        获取风险预警系统的基础数据
+        """
+        return self.alertSystemService.selectRiskAlertSystemList(RiskAlertSystem())
+    def format_data(self, raw_data: List[RiskAlertSystem]) -> pd.DataFrame:
+        """
+        处理原始数据变为DataFrame格式
+        """
+        data_frame = pd.DataFrame([entry.__dict__ for entry in raw_data])
+        data_frame['${attrib1}'] = data_frame['${attrib1}'].astype(float)
+        data_frame['${attrib2}'] = data_frame['${attrib2}'].astype(int)
+        return data_frame
+    def evaluate_trends(self, data_frame: pd.DataFrame) -> Dict[str, float]:
+        """
+        计算数据中的趋势
+        """
+        trends = {
+            '${attrib1}_average': data_frame['${attrib1}'].mean(),
+            '${attrib2}_peak': data_frame['${attrib2}'].max(),
+            '${attrib3}_low': data_frame['${attrib3}'].min(),
+        }
+        return trends
+    def display_data(self, data_frame: pd.DataFrame) -> None:
+        """
+        展示数据的可视化结果
+        """
+        plt.figure(figsize=(12, 7))
+        sns.lineplot(data=data_frame, x='${attrib1}', y='${attrib2}', label='${attrib1} vs ${attrib2}')
+        plt.title('数据趋势分析 - 风险预警系统')
+        plt.xlabel('${attrib1}')
+        plt.ylabel('${attrib2}')
+        plt.legend()
+        plt.grid()
+        plt.show()
+    def compose_report(self, data_frame: pd.DataFrame, trend_values: Dict[str, float]) -> str:
+        """
+        编制风险预警系统的分析报告
+        """
+        report_content = f"""
+        风险预警系统分析报告
+        =====================
+        数据量: {len(data_frame)}
+        ${attrib1}的平均值: {trend_values['${attrib1}_average']}
+        ${attrib2}的最高值: {trend_values['${attrib2}_peak']}
+        ${attrib3}的最低值: {trend_values['${attrib3}_low']}
+        =====================
+        数据详情:
+        {data_frame.head().to_string()}
+        """
+        return report_content
+    def execute_analysis(self) -> None:
+        """
+        开始进行风险预警系统数据分析
+        """
+        # 数据加载
+        raw_data = self.fetch_data()
+        # 数据格式化
+        formatted_data = self.format_data(raw_data)
+        # 趋势评估
+        trend_values = self.evaluate_trends(formatted_data)
+        # 数据呈现
+        self.display_data(formatted_data)
+        # 报告编制
+        final_report = self.compose_report(formatted_data, trend_values)
+        print(final_report)
+from com..analysis import RiskAlertSystemHandler
+from com..mapper import RiskAlertSystemMapper
+def start_analysis():
+    """
+    初始化并运行数据分析模块
+    """
+    # 实例化Mapper
+    alertSystemMapper = RiskAlertSystemMapper()
+    # 实例化数据处理类
+    alertSystemHandler = RiskAlertSystemHandler(alertSystemMapper)
+    # 执行分析
+    alertSystemHandler.execute_analysis()
+import request from '@/utils/request'
+// 查询风险预警系统列表
+export function listRisk_warn_sys(queryData) {
+  return request({
+    url: '/risk_warn_sys/list',
+    method: 'get',
+    params: queryData
+  })
+}
+// 查询风险预警系统详细
+export function getRisk_warn_sys(id) {
+  return request({
+    url: '/risk_warn_sys/' + id,
+    method: 'get'
+  })
+}
+// 新增风险预警系统
+export function addRisk_warn_sys(data) {
+  return request({
+    url: '/risk_warn_sys',
+    method: 'post',
+    data: data
+  })
+}
+// 编辑风险预警系统
+export function updateRisk_warn_sys(data) {
+  return request({
+    url: '/risk_warn_sys',
+    method: 'put',
+    data: data
+  })
+}
+// 删除风险预警系统
+export function delRisk_warn_sys(id) {
+  return request({
+    url: '/risk_warn_sys/' + id,
+    method: 'delete'
+  })
+}
+from abc import abstractmethod
+from typing import List, Optional
+from com.domain import RiskWarningSystem
+class RiskWarningMapper():
+    """
+    接口定义用于管理风险预警事宜
+    """
+    @abstractmethod
+    def fetchRiskWarningById(self, record_id: int) -> Optional[RiskWarningSystem]:
+        """
+        根据ID检索风险预警记录
+        :param record_id: 风险预警记录的唯一标识
+        :return: 风险预警记录实例
+        """
+        pass
+    @abstractmethod
+    def fetchAllRiskWarnings(self, criteria: RiskWarningSystem) -> List[RiskWarningSystem]:
+        """
+        获取风险预警记录的集合
+        :param criteria: 查询条件
+        :return: 风险预警记录列表
+        """
+        pass
+    @abstractmethod
+    def addRiskWarning(self, new_warning: RiskWarningSystem) -> int:
+        """
+        添加风险预警记录
+        :param new_warning: 要添加的风险预警业务对象
+        :return: 操作结果（受影响的记录行数）
+        """
+        pass
+    @abstractmethod
+    def modifyRiskWarning(self, updated_warning: RiskWarningSystem) -> int:
+        """
+        更新指定的风险预警记录
+        :param updated_warning: 更新后的风险预警对象
+        :return: 操作结果（受影响的记录行数）
+        """
+        pass
+    @abstractmethod
+    def removeRiskWarningById(self, record_id: int) -> int:
+        """
+        根据ID删除风险预警记录
+        :param record_id: 风险预警记录的唯一标识
+        :return: 操作结果（受影响的记录行数）
+        """
+        pass
+    @abstractmethod
+    def removeRiskWarningsByIds(self, record_ids: List[int]) -> int:
+        """
+        批量删除指定的风险预警记录
+        :param record_ids: 待删除的风险预警记录ID集合
+        :return: 操作结果（受影响的记录行数）
+        """
+        pass
+from com.mapper import RiskWarningMapper
+from com.domain import RiskWarningSystem
+from typing import List, Optional
+class RiskWarningMapperImplementation(RiskWarningMapper):
+    """
+    风险预警Mapper接口的具体实现
+    """
+    def fetchRiskWarningById(self, record_id: int) -> Optional[RiskWarningSystem]:
+        """
+        根据ID检索风险预警记录
+        :param record_id: 风险预警记录的唯一标识
+        :return: 风险预警记录实例
+        """
+        # 进行数据库查询操作
+        return RiskWarningSystem()
+    def fetchAllRiskWarnings(self, criteria: RiskWarningSystem) -> List[RiskWarningSystem]:
+        """
+        获取风险预警记录的集合
+        :param criteria: 查询条件
+        :return: 风险预警记录列表
+        """
+        # 执行查询以获取列表
+        return [RiskWarningSystem()]
+    def addRiskWarning(self, new_warning: RiskWarningSystem) -> int:
+        """
+        添加风险预警记录
+        :param new_warning: 要添加的风险预警业务对象
+        :return: 操作结果（受影响的记录行数）
+        """
+        # 插入新记录到数据库
+        return 1
+    def modifyRiskWarning(self, updated_warning: RiskWarningSystem) -> int:
+        """
+        更新指定的风险预警记录
+        :param updated_warning: 更新后的风险预警对象
+        :return: 操作结果（受影响的记录行数）
+        """
+        # 更新记录到数据库
+        return 1
+    def removeRiskWarningById(self, record_id: int) -> int:
+        """
+        根据ID删除风险预警记录
+        :param record_id: 风险预警记录的唯一标识
+        :return: 操作结果（受影响的记录行数）
+        """
+        # 从数据库中删除记录
+        return 1
+    def removeRiskWarningsByIds(self, record_ids: List[int]) -> int:
+        """
+        批量删除指定的风险预警记录
+        :param record_ids: 待删除的风险预警记录ID集合
+        :return: 操作结果（受影响的记录行数）
+        """
+        # 一次性删除多条记录
+        return len(record_ids)
+from com..service import IForecastModelService
+from com..mapper import ForecastModelMapper
+from com..domain import ForecastModel
+from typing import List, Optional
+class ForecastModelServiceImpl(IForecastModelService):
+    """
+    该类实现了预测模型服务接口
+    """
+    def __init__(self, modelMapper: ForecastModelMapper):
+        """
+        初始化ForecastModelServiceImpl，传入ForecastModelMapper对象
+        :param modelMapper: ForecastModelMapper的实例
+        """
+        self.modelMapper = modelMapper
+    def fetchModelById(self, model_id: int) -> Optional[ForecastModel]:
+        """
+        根据主键获取预测模型
+        :param model_id: 预测模型的主键
+        :return: 对应的预测模型对象
+        """
+        # 使用Mapper查询
+        return self.modelMapper.fetchModelById(model_id)
+    def fetchModelList(self, criteria: ForecastModel) -> List[ForecastModel]:
+        """
+        根据条件获取预测模型列表
+        :param criteria: 用于查询的预测模型条件
+        :return: 预测模型对象列表
+        """
+        # 使用Mapper查询列表
+        return self.modelMapper.fetchModelList(criteria)
+    def addModel(self, newModel: ForecastModel) -> int:
+        """
+        插入新的预测模型
+        :param newModel: 需要新增的预测模型对象
+        :return: 插入操作影响的行数
+        """
+        # 使用Mapper执行插入
+        return self.modelMapper.addModel(newModel)
+    def modifyModel(self, updatedModel: ForecastModel) -> int:
+        """
+        更新预测模型
+        :param updatedModel: 需要更新的预测模型对象
+        :return: 更新操作影响的行数
+        """
+        # 使用Mapper进行更新
+        return self.modelMapper.modifyModel(updatedModel)
+    def removeModelById(self, model_id: int) -> int:
+        """
+        删除指定的预测模型
+        :param model_id: 要删除的模型主键
+        :return: 删除操作影响的行数
+        """
+        # 使用Mapper进行删除
+        return self.modelMapper.removeModelById(model_id)
+import request from '@/utils/request'
+// 查询智能预测模型列表
+export function listSmart_pred_model(queryData) {
+  return request({
+    url: '/smart_pred_model/list',
+    method: 'get',
+    params: queryData
+  })
+}
+// 查询智能预测模型详细
+export function getSmart_pred_model(id) {
+  return request({
+    url: '/smart_pred_model/' + id,
+    method: 'get'
+  })
+}
+// 新增智能预测模型
+export function addSmart_pred_model(data) {
+  return request({
+    url: '/smart_pred_model',
+    method: 'post',
+    data: data
+  })
+}
+// 编辑智能预测模型
+export function updateSmart_pred_model(data) {
+  return request({
+    url: '/smart_pred_model',
+    method: 'put',
+    data: data
+  })
+}
+// 删除智能预测模型
+export function delSmart_pred_model(id) {
+  return request({
+    url: '/smart_pred_model/' + id,
+    method: 'delete'
+  })
+}
+from datetime import datetime
+from typing import List, Optional
+from com.common.annotation import Excel
+from com.common.core.domain import BaseEntity, TreeEntity
+from com.common.utils import ToStringBuilder, ToStringStyle
+class SmartPredModel(BaseEntity if true or false else TreeEntity):
+    """
+    智能预测模型对象 smart_pred_model
+    """
+    serial_version_UID: int = 1  # 序列化版本UID
+    def __init__(self):
+        super().__init__()
+        # 初始化字段
+        self.id: Optional[Long] = None
+        self.modelName: Optional[String] = None
+        self.version: Optional[String] = None
+        self.trainDataRange: Optional[String] = None
+        self.accuracy: Optional[BigDecimal] = None
+        self.lastTrained: Optional[Date] = None
+        self.status: Optional[String] = None
+        self.params: Optional[String] = None
+        self.notes: Optional[String] = None
+    @property
+    def id(self) -> Optional[Long]:
+        """
+        获取主键ID
+        :return: Long 类型的主键ID
+        """
+        return self._id
+    @id.setter
+    def id(self, value: Optional[Long]):
+        """
+        设置主键ID
+        :param value: Long 类型的主键ID
+        """
+        self._id = value
+    @property
+    def modelName(self) -> Optional[String]:
+        """
+        获取模型名称
+        :return: String 类型的模型名称
+        """
+        return self._modelName
+    @modelName.setter
+    def modelName(self, value: Optional[String]):
+        """
+        设置模型名称
+        :param value: String 类型的模型名称
+        """
+        self._modelName = value
+    @property
+    def version(self) -> Optional[String]:
+        """
+        获取模型版本
+        :return: String 类型的模型版本
+        """
+        return self._version
+    @version.setter
+    def version(self, value: Optional[String]):
+        """
+        设置模型版本
+        :param value: String 类型的模型版本
+        """
+        self._version = value
+    @property
+    def trainDataRange(self) -> Optional[String]:
+        """
+        获取训练数据范围
+        :return: String 类型的训练数据范围
+        """
+        return self._trainDataRange
+    @trainDataRange.setter
+    def trainDataRange(self, value: Optional[String]):
+        """
+        设置训练数据范围
+        :param value: String 类型的训练数据范围
+        """
+        self._trainDataRange = value
+    @property
+    def accuracy(self) -> Optional[BigDecimal]:
+        """
+        获取模型准确率
+        :return: BigDecimal 类型的模型准确率
+        """
+        return self._accuracy
+    @accuracy.setter
+    def accuracy(self, value: Optional[BigDecimal]):
+        """
+        设置模型准确率
+        :param value: BigDecimal 类型的模型准确率
+        """
+        self._accuracy = value
+    @property
+    def lastTrained(self) -> Optional[Date]:
+        """
+        获取最后训练时间
+        :return: Date 类型的最后训练时间
+        """
+        return self._lastTrained
+    @lastTrained.setter
+    def lastTrained(self, value: Optional[Date]):
+        """
+        设置最后训练时间
+        :param value: Date 类型的最后训练时间
+        """
+        self._lastTrained = value
+    @property
+    def status(self) -> Optional[String]:
+        """
+        获取模型状态（如active/inactive）
+        :return: String 类型的模型状态（如active/inactive）
+        """
+        return self._status
+    @status.setter
+    def status(self, value: Optional[String]):
+        """
+        设置模型状态（如active/inactive）
+        :param value: String 类型的模型状态（如active/inactive）
+        """
+        self._status = value
+    @property
+    def params(self) -> Optional[String]:
+        """
+        获取模型参数配置
+        :return: String 类型的模型参数配置
+        """
+        return self._params
+    @params.setter
+    def params(self, value: Optional[String]):
+        """
+        设置模型参数配置
+        :param value: String 类型的模型参数配置
+        """
+        self._params = value
+    @property
+    def notes(self) -> Optional[String]:
+        """
+        获取备注说明
+        :return: String 类型的备注说明
+        """
+        return self._notes
+    @notes.setter
+    def notes(self, value: Optional[String]):
+        """
+        设置备注说明
+        :param value: String 类型的备注说明
+        """
+        self._notes = value
+<template>
+    <div class="main-content">
+        <vortex-form :model="searchForm" ref="searchFormRef" :inline="true" v-show="isSearchVisible" label-width="72px">
+            <form-field label="模型名称" prop="modelName" />
+            <form-field label="模型版本" prop="version" />
+            <form-field label="训练数据范围" prop="trainDataRange" />
+            <form-field label="模型准确率" prop="accuracy" />
+            <vortex-form-item label="最后训练时间" prop="lastTrained">
+                <vortex-date-picker clearable
+                    v-model="searchForm.lastTrained"
+                    type="date"
+                    value-format="YYYY-MM-DD"
+                    placeholder="请选择最后训练时间">
+                </vortex-date-picker>
+            </vortex-form-item>
+            <vortex-form-item>
+                <vortex-button type="primary" icon="Search" @click="executeSearch">搜索</vortex-button>
+                <vortex-button icon="Refresh" @click="clearSearch">重置</vortex-button>
+            </vortex-form-item>
+        </vortex-form>
+        <vortex-row :gutter="10" class="mb8">
+            <vortex-col :span="1.5">
+                <vortex-button
+                    type="primary"
+                    plain
+                    icon="Plus"
+                    @click="addNewModel"
+                    v-hasPermi="['${moduleName}:smart_pred_model:add']"
+                >新增</vortex-button>
+            </vortex-col>
+            <right-toolbar v-model:showSearch="isSearchVisible" @queryTable="refreshList"></right-toolbar>
+        </vortex-row>
+        <vortex-table v-loading="isLoading" :data="modelList" @selection-change="onSelectionChange">
+            <vortex-table-column type="selection" width="55" align="center" />
+            <vortex-table-column label="主键ID" align="center" prop="id" />
+            <vortex-table-column label="模型名称" align="center" prop="modelName" />
+            <vortex-table-column label="模型版本" align="center" prop="version" />
+            <vortex-table-column label="训练数据范围" align="center" prop="trainDataRange" />
+            <vortex-table-column label="模型准确率" align="center" prop="accuracy" />
+            <vortex-table-column label="最后训练时间" align="center" prop="lastTrained" width="180">
+                <template #default="scope">
+                    <span>{{ formatDate(scope.row.lastTrained) }}</span>
+                </template>
+            </vortex-table-column>
+            <vortex-table-column label="模型状态" align="center" prop="status" />
+            <vortex-table-column label="模型参数配置" align="center" prop="params" />
+            <vortex-table-column label="备注说明" align="center" prop="notes" />
+            <vortex-table-column label="操作" align="center" class-name="small-padding fixed-width">
+                <template #default="scope">
+                    <vortex-button link type="primary" icon="Edit" @click="editModel(scope.row)" v-hasPermi="['${moduleName}:smart_pred_model:edit']">编辑</vortex-button>
+                    <vortex-button link type="primary" icon="Delete" @click="deleteModel(scope.row)" v-hasPermi="['${moduleName}:smart_pred_model:remove']">删除</vortex-button>
+                </template>
+            </vortex-table-column>
+        </vortex-table>
+        <pagination
+            v-show="totalItems > 0"
+            :total="totalItems"
+            v-model:page="searchForm.pageNum"
+            v-model:limit="searchForm.pageSize"
+            @pagination="refreshList"
+        />
+        <vortex-dialog :title="dialogTitle" v-model="dialogVisible" width="500px" append-to-body>
+            <vortex-form ref="modelFormRef" :model="editForm" :rules="validationRules" label-width="80px">
+                <form-field label="模型名称" prop="modelName" :model="editForm" />
+                <form-field label="模型版本" prop="version" :model="editForm" />
+                <form-field label="训练数据范围" prop="trainDataRange" :model="editForm" />
+                <form-field label="模型准确率" prop="accuracy" :model="editForm" />
+                <vortex-form-item label="最后训练时间" prop="lastTrained">
+                    <vortex-date-picker clearable
+                        v-model="editForm.lastTrained"
+                        type="date"
+                        value-format="YYYY-MM-DD"
+                        placeholder="请选择最后训练时间">
+                    </vortex-date-picker>
+                </vortex-form-item>
+                <vortex-form-item label="模型参数配置" prop="params">
+                    <vortex-input v-model="editForm.params" type="textarea" placeholder="请输入内容" />
+                </vortex-form-item>
+                <vortex-form-item label="备注说明" prop="notes">
+                    <vortex-input v-model="editForm.notes" type="textarea" placeholder="请输入内容" />
+                </vortex-form-item>
+            </vortex-form>
+            <template #footer>
+                <div class="dialog-footer">
+                    <vortex-button type="primary" @click="submitModelForm">确 定</vortex-button>
+                    <vortex-button @click="closeDialog">取 消</vortex-button>
+                </div>
+            </template>
+        </vortex-dialog>
+    </div>
+</template>
+<script setup name="SmartPredictiveModel">
+import { listSmartPredModel, getSmartPredModel, deleteSmartPredModel, addSmartPredModel, editSmartPredModel } from "@/api/smart_pred_model";
+const { proxy } = getCurrentInstance();
+const modelList = ref([]);
+const dataState = reactive({
+  editForm: {},
+  searchForm: {
+    pageNum: 1,
+    pageSize: 10,
+    modelName: null,
+    version: null,
+    trainDataRange: null,
+    accuracy: null,
+    lastTrained: null,
+    status: null,
+    params: null,
+    notes: null,
+  },
+  validationRules: {
+    modelName: [{ required: true, message: "模型名称不能为空", trigger: "blur" }],
+    version: [{ required: true, message: "模型版本不能为空", trigger: "blur" }],
+    trainDataRange: [{ required: true, message: "训练数据范围不能为空", trigger: "blur" }],
+    status: [{ required: true, message: "模型状态不能为空", trigger: "change" }],
+  },
+});
+const { searchForm, editForm, validationRules } = toRefs(dataState);
+/** 查询模型列表 */
+function refreshList() {
+    isLoading.value = true;
+    listSmartPredModel(searchForm.value).then(response => {
+        modelList.value = response.rows;
+        totalItems.value = response.total;
+        isLoading.value = false;
+    });
+}
+// 表单重置
+function clearForm() {
+    editForm.value = {
+        id: null,
+        modelName: null,
+        version: null,
+        trainDataRange: null,
+        accuracy: null,
+        lastTrained: null,
+        status: null,
+        params: null,
+        notes: null,
+    };
+    proxy.resetForm("modelFormRef");
+}
+/** 执行搜索操作 */
+function executeSearch() {
+    searchForm.value.pageNum = 1;
+    refreshList();
+}
+/** 清除搜索条件 */
+function clearSearch() {
+    proxy.resetForm("searchFormRef");
+    executeSearch();
+}
+// 处理选中的项目
+function onSelectionChange(selectedItems) {
+    selectedIds.value = selectedItems.map(item => item.id);
+    isSingleSelection.value = selectedItems.length !== 1;
+    isMultipleSelection.value = selectedItems.length === 0;
+}
+/** 添加新模型 */
+function addNewModel() {
+    clearForm();
+    dialogVisible.value = true;
+    dialogTitle.value = "添加智能预测模型";
+}
+/** 编辑模型 */
+function editModel(row) {
+    clearForm();
+    const currentId = row.id || selectedIds.value;
+    getSmartPredModel(currentId).then(response => {
+        editForm.value = response.data;
+        dialogVisible.value = true;
+        dialogTitle.value = "编辑智能预测模型";
+    });
+}
+/** 提交表单 */
+function submitModelForm() {
+    proxy.$refs["modelFormRef"].validate(isValid => {
+        if (isValid) {
+            const action = editForm.value.id !== null ? editSmartPredModel : addSmartPredModel;
+            action(editForm.value).then(() => {
+                proxy.$modal.msgSuccess(editForm.value.id !== null ? "编辑成功" : "新增成功");
+                dialogVisible.value = false;
+                refreshList();
+            });
+        }
+    });
+}
+/** 删除模型 */
+function deleteModel(row) {
+    const currentIds = row.id || selectedIds.value;
+    proxy.$modal.confirm(`是否确认删除智能预测模型编号为"${currentIds}"的数据项？`).then(() => {
+        return deleteSmartPredModel(currentIds);
+    }).then(() => {
+        refreshList();
+        proxy.$modal.msgSuccess("删除成功");
+    }).catch(() => {});
+}
+function formatDate(dateString) {
+    return parseTime(dateString, '{y}-{m}-{d}');
+}
+refreshList();
+</script>
+from flask import request, jsonify
+from flask_restful import Resource
+from com..common.core import CoreController
+from com..domain import PredictionModel
+from com..service import PredictionService
+from com..common.utils import ExcelHandler
+from com..annotation import ActivityLog
+from com..common.enums import TaskType
+from com..common.exceptions import AppException
+import logging
+# 配置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+class PredictionController(Resource):
+    def __init__(self):
+        """
+        Initialization of PredictionController which includes Injection of PredictionService
+        """
+        self.predictionService = PredictionService()
+        logger.info("Initialized PredictionController")
+    # Retrieve prediction models list
+    @ActivityLog(title="Prediction Model", businessType=TaskType.LIST)
+    def get(self):
+        """
+        Fetches the list of prediction models
+        :return: Returns the dataset of prediction models
+        """
+        try:
+            prediction_model = PredictionModel(**request.args)
+            if self.is_some_condition():  # Placeholder for actual condition
+                self.begin_page()
+                model_list = self.predictionService.fetchModelList(prediction_model)
+                logger.info("Successfully retrieved prediction model list")
+                return self.format_data_table(model_list)
+            elif self.is_other_condition():  # Placeholder for another condition
+                model_list = self.predictionService.fetchModelList(prediction_model)
+                logger.info("Successfully retrieved prediction model tree structure")
+                return self.success_response(model_list)
+        except AppException as e:
+            logger.error(f"Failed to retrieve prediction model list: {e}")
+            return self.error_response(e.message)
+    # Get detailed information of a prediction model
+    @ActivityLog(title="Prediction Model", businessType=TaskType.QUERY)
+    def get_detail(self, model_id):
+        """
+        Fetches detailed information of a prediction model based on ID
+        :param model_id: Identifier for the model
+        :return: Returns detailed information of the prediction model
+        """
+        try:
+            model_info = self.predictionService.findModelById(model_id)
+            if not model_info:
+                raise AppException("Prediction model not found")
+            logger.info("Successfully retrieved prediction model details")
+            return self.success_response(model_info)
+        except AppException as e:
+            logger.error(f"Failed to retrieve prediction model details: {e}")
+            return self.error_response(e.message)
+    # Add a new prediction model
+    @ActivityLog(title="Prediction Model", businessType=TaskType.INSERT)
+    def post(self):
+        """
+        Adds a new prediction model
+        :return: Returns the result of the operation
+        """
+        try:
+            prediction_model = PredictionModel(**request.json)
+            if not prediction_model:
+                raise AppException("Parameters cannot be empty")
+            result = self.predictionService.addPredictionModel(prediction_model)
+            logger.info("Successfully added a new prediction model")
+            return self.ajax_response(result)
+        except AppException as e:
+            logger.error(f"Failed to add prediction model: {e}")
+            return self.error_response(e.message)
+    # Edit an existing prediction model
+    @ActivityLog(title="Prediction Model", businessType=TaskType.UPDATE)
+    def put(self):
+        """
+        Edits an existing prediction model
+        :return: Returns the result of the operation
+        """
+        try:
+            prediction_model = PredictionModel(**request.json)
+            if not prediction_model:
+                raise AppException("Parameters cannot be empty")
+            result = self.predictionService.modifyPredictionModel(prediction_model)
+            logger.info("Successfully edited prediction model")
+            return self.ajax_response(result)
+        except AppException as e:
+            logger.error(f"Failed to edit prediction model: {e}")
+            return self.error_response(e.message)
+    # Remove prediction models
+    @ActivityLog(title="Prediction Model", businessType=TaskType.DELETE)
+    def delete(self, ids):
+        """
+        Deletes one or more prediction models
+        :param ids: Array of identifiers
+        :return: Returns the result of the operation
+        """
+        try:
+            if not ids:
+                raise AppException("Parameters cannot be empty")
+            result = self.predictionService.removeModelsByIds(ids)
+            logger.info("Successfully deleted prediction models")
+            return self.ajax_response(result)
+        except AppException as e:
+            logger.error(f"Failed to delete prediction models: {e}")
+            return self.error_response(e.message)
+from abc import abstractmethod
+from typing import List, Optional
+from com.domain import SmartPredModel
+class ModelMappingInterface:
+    """
+    接口负责智能预测相关模型的映射
+    """
+    @abstractmethod
+    def get_model_by_id(self, model_id: int) -> Optional[SmartPredModel]:
+        """
+        根据ID获取智能预测模型
+        :param model_id: 模型唯一识别码
+        :return: 若存在则返回模型对象，否则为None
+        """
+        pass
+    @abstractmethod
+    def get_all_models(self, search_criteria: SmartPredModel) -> List[SmartPredModel]:
+        """
+        根据条件获取模型列表
+        :param search_criteria: 过滤条件模型
+        :return: 满足条件的模型对象列表
+        """
+        pass
+    @abstractmethod
+    def add_model(self, new_model: SmartPredModel) -> int:
+        """
+        插入新的智能预测模型
+        :param new_model: 新模型对象
+        :return: 影响的行数
+        """
+        pass
+    @abstractmethod
+    def modify_model(self, update_model: SmartPredModel) -> int:
+        """
+        更新现有的智能预测模型
+        :param update_model: 更新后的模型对象
+        :return: 影响的行数
+        """
+        pass
+    @abstractmethod
+    def remove_model_by_id(self, model_id: int) -> int:
+        """
+        根据ID删除模型
+        :param model_id: 模型唯一识别码
+        :return: 影响的行数
+        """
+        pass
+    @abstractmethod
+    def bulk_remove_models(self, model_ids: List[int]) -> int:
+        """
+        批量删除多个模型
+        :param model_ids: 需要删除的模型ID集合
+        :return: 影响的行数
+        """
+        pass
+class ModelMappingImplementation(ModelMappingInterface):
+    """
+    实现智能预测模型的映射接口
+    """
+    def get_model_by_id(self, model_id: int) -> Optional[SmartPredModel]:
+        # 这里应该有具体的数据查询逻辑
+        return SmartPredModel()
+    def get_all_models(self, search_criteria: SmartPredModel) -> List[SmartPredModel]:
+        # 这里应该有具体的查询逻辑
+        return [SmartPredModel()]
+    def add_model(self, new_model: SmartPredModel) -> int:
+        # 这里应该有插入数据库的相关逻辑
+        return 1
+    def modify_model(self, update_model: SmartPredModel) -> int:
+        # 这里应该有更新数据库的相应逻辑
+        return 1
+    def remove_model_by_id(self, model_id: int) -> int:
+        # 这里应该有删除数据库记录的逻辑
+        return 1
+    def bulk_remove_models(self, model_ids: List[int]) -> int:
+        # 这里应该有批量删除记录的相关逻辑
+        return len(model_ids)
+from typing import List, Optional, Dict
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from com..domain import PredictiveModel
+from com..mapper import PredictiveModelMapper
+from com..service import IPredictiveModelService
+from com..service.impl import PredictiveModelServiceImpl
+class PredictiveModelAnalysis:
+    """
+    进行预测模型的数据分析
+    """
+    def __init__(self, modelMapper: PredictiveModelMapper):
+        """
+        实例化预测模型分析类，接受模型映射实例
+        :param modelMapper: 预测模型映射器
+        """
+        self.modelMapper = modelMapper
+        self.modelService: IPredictiveModelService = PredictiveModelServiceImpl(modelMapper)
+    def fetch_data(self) -> List[PredictiveModel]:
+        """
+        获取预测模型相关数据
+        :return: 预测模型数据的列表
+        """
+        return self.modelService.selectPredictiveModelList(PredictiveModel())
+    def transform_data(self, records: List[PredictiveModel]) -> pd.DataFrame:
+        """
+        将预测模型数据转化为DataFrame格式
+        :param records: 预测模型数据列表
+        :return: DataFrame格式的预处理数据
+        """
+        data_frame = pd.DataFrame([record.__dict__ for record in records])
+        data_frame['${column1}'] = data_frame['${column1}'].astype(float)
+        data_frame['${column2}'] = data_frame['${column2}'].astype(int)
+        return data_frame
+    def trend_analysis(self, data_frame: pd.DataFrame) -> Dict[str, float]:
+        """
+        对预测模型的数据趋势进行分析
+        :param data_frame: 处理后的DataFrame
+        :return: 包含趋势分析结果的字典
+        """
+        trend_results = {
+            '${column1}_average': data_frame['${column1}'].mean(),
+            '${column2}_maximum': data_frame['${column2}'].max(),
+            '${column3}_minimum': data_frame['${column3}'].min(),
+        }
+        return trend_results
+    def data_visualization(self, data_frame: pd.DataFrame) -> None:
+        """
+        将数据可视化展现
+        :param data_frame: 处理完成的DataFrame
+        """
+        plt.figure(figsize=(12, 8))
+        sns.lineplot(data=data_frame, x='${column1}', y='${column2}', label='趋势比较')
+        plt.title('预测模型数据趋势图')
+        plt.xlabel('${column1}')
+        plt.ylabel('${column2}')
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+    def create_report(self, data_frame: pd.DataFrame, trend_results: Dict[str, float]) -> str:
+        """
+        整理并输出数据分析报告
+        :param data_frame: 处理后的DataFrame
+        :param trend_results: 分析结果字典
+        :return: 结构化的报告字符串
+        """
+        report_content = f"""
+        预测模型数据分析报告
+        ===========================
+        数据条目数量: {len(data_frame)}
+        ${column1} 平均: {trend_results['${column1}_average']}
+        ${column2} 最大值: {trend_results['${column2}_maximum']}
+        ${column3} 最小值: {trend_results['${column3}_minimum']}
+        ===========================
+        数据摘要:
+        {data_frame.head().to_string()}
+        """
+        return report_content
+    def perform_analysis(self) -> None:
+        """
+        执行数据分析的各个步骤
+        """
+        records = self.fetch_data()
+        processed_frame = self.transform_data(records)
+        trend_output = self.trend_analysis(processed_frame)
+        self.data_visualization(processed_frame)
+        final_report = self.create_report(processed_frame, trend_output)
+        print(final_report)
+from com..analysis import PredictiveModelAnalysis
+from com..mapper import PredictiveModelMapper
+def initiate_analysis():
+    """
+    开启数据分析的进程
+    """
+    modelMapper = PredictiveModelMapper()
+    analysis_instance = PredictiveModelAnalysis(modelMapper)
+    analysis_instance.perform_analysis()
+<template>
+  <div class="main-wrapper">
+    <form-container :model="searchParams" v-show="isSearchVisible" ref="searchForm" label-width="62px">
+      <form-item label="节点" prop="chainNode">
+        <input-field
+          v-model="searchParams.chainNode"
+          placeholder="请输入节点"
+          clearable
+          @keyup.enter.native="processInput"
+        />
+      </form-item>
+      <form-item label="存量数量" prop="stockCount">
+        <input-field
+          v-model="searchParams.stockCount"
+          placeholder="请输入存量数量"
+          clearable
+          @keyup.enter.native="processInput"
+        />
+      </form-item>
+      <form-item label="周期(天)" prop="cycleDays">
+        <input-field
+          v-model="searchParams.cycleDays"
+          placeholder="请输入周期(天)"
+          clearable
+          @keyup.enter.native="processInput"
+        />
+      </form-item>
+      <form-item label="费用" prop="expense">
+        <input-field
+          v-model="searchParams.expense"
+          placeholder="请输入费用"
+          clearable
+          @keyup.enter.native="processInput"
+        />
+      </form-item>
+      <form-item label="效能分数" prop="efficiencyScore">
+        <input-field
+          v-model="searchParams.efficiencyScore"
+          placeholder="请输入效能分数"
+          clearable
+          @keyup.enter.native="processInput"
+        />
+      </form-item>
+      <form-item label="风险评级" prop="riskLevel">
+        <input-field
+          v-model="searchParams.riskLevel"
+          placeholder="请输入风险评级"
+          clearable
+          @keyup.enter.native="processInput"
+        />
+      </form-item>
+      <form-item label="审查日期" prop="reviewDate">
+        <date-picker clearable
+          v-model="searchParams.reviewDate"
+          type="date"
+          value-format="yyyy-MM-dd"
+          placeholder="请选择审查日期">
+        </date-picker>
+      </form-item>
+      <form-item label="修改时间" prop="modificationTime">
+        <date-picker clearable
+          v-model="searchParams.modificationTime"
+          type="date"
+          value-format="yyyy-MM-dd"
+          placeholder="请选择修改时间">
+        </date-picker>
+      </form-item>
+      <form-item>
+        <button type="primary" icon="n-icon-search" size="mini" @click="executeSearch">查找</button>
+        <button icon="n-icon-refresh" size="mini" @click="clearQuery">重置</button>
+      </form-item>
+    </form-container>
+    <row-layout :spacing="10" class="mb8">
+      <col-layout :span="1.5">
+        <button
+          type="primary"
+          plain
+          icon="n-icon-plus"
+          size="mini"
+          @click="initiateAdd"
+          v-hasPermi="['${moduleName}:chain_opt:add']"
+        >增加</button>
+      </col-layout>
+      <toolbar :isSearchVisible.sync="isSearchVisible" @triggerTable="fetchList"></toolbar>
+    </row-layout>
+    <data-table v-loading="isLoading" :data="chainOptList" @selection-change="handleSelectionChange">
+      <table-column type="selection" width="55" align="center" />
+      <table-column label="ID" align="center" prop="id" />
+      <table-column label="节点" align="center" prop="chainNode" />
+      <table-column label="存量数量" align="center" prop="stockCount" />
+      <table-column label="周期(天)" align="center" prop="cycleDays" />
+      <table-column label="费用" align="center" prop="expense" />
+      <table-column label="效能分数" align="center" prop="efficiencyScore" />
+      <table-column label="风险评级" align="center" prop="riskLevel" />
+      <table-column label="建议" align="center" prop="suggestion" />
+      <table-column label="审查日期" align="center" prop="reviewDate" width="180">
+        <template slot-scope="scope">
+          <span>{{ transformDate(scope.row.reviewDate, '{y}-{m}-{d}') }}</span>
+        </template>
+      </table-column>
+      <table-column label="修改时间" align="center" prop="modificationTime" width="180">
+        <template slot-scope="scope">
+          <span>{{ transformDate(scope.row.modificationTime, '{y}-{m}-{d}') }}</span>
+        </template>
+      </table-column>
+      <table-column label="操作" align="center" class-name="small-padding fixed-width">
+        <template slot-scope="scope">
+          <button
+            size="mini"
+            type="text"
+            icon="n-icon-edit"
+            @click="initiateEdit(scope.row)"
+            v-hasPermi="['${moduleName}:chain_opt:edit']"
+          >编辑</button>
+          <button
+            size="mini"
+            type="text"
+            icon="n-icon-delete"
+            @click="initiateDelete(scope.row)"
+            v-hasPermi="['${moduleName}:chain_opt:remove']"
+          >删除</button>
+        </template>
+      </table-column>
+    </data-table>
+    <pagination-component
+      v-show="totalItems>0"
+      :total="totalItems"
+      :currentPage.sync="searchParams.pageNum"
+      :itemsPerPage.sync="searchParams.pageSize"
+      @change="fetchList"
+    />
+    <dialog-modal :title="dialogTitle" :isVisible.sync="dialogOpen" width="500px" append-to-body>
+      <form-container ref="form" :model="editForm" :validationRules="validationRules" label-width="80px">
+        <form-item label="节点" prop="chainNode">
+          <input-field v-model="editForm.chainNode" placeholder="请输入节点" />
+        </form-item>
+        <form-item label="存量数量" prop="stockCount">
+          <input-field v-model="editForm.stockCount" placeholder="请输入存量数量" />
+        </form-item>
+        <form-item label="周期(天)" prop="cycleDays">
+          <input-field v-model="editForm.cycleDays" placeholder="请输入周期(天)" />
+        </form-item>
+        <form-item label="费用" prop="expense">
+          <input-field v-model="editForm.expense" placeholder="请输入费用" />
+        </form-item>
+        <form-item label="效能分数" prop="efficiencyScore">
+          <input-field v-model="editForm.efficiencyScore" placeholder="请输入效能分数" />
+        </form-item>
+        <form-item label="风险评级" prop="riskLevel">
+          <input-field v-model="editForm.riskLevel" placeholder="请输入风险评级" />
+        </form-item>
+        <form-item label="建议" prop="suggestion">
+          <input-field v-model="editForm.suggestion" type="textarea" placeholder="请输入内容" />
+        </form-item>
+        <form-item label="审查日期" prop="reviewDate">
+          <date-picker clearable
+            v-model="editForm.reviewDate"
+            type="date"
+            value-format="yyyy-MM-dd"
+            placeholder="请选择审查日期">
+          </date-picker>
+        </form-item>
+        <form-item label="修改时间" prop="modificationTime">
+          <date-picker clearable
+            v-model="editForm.modificationTime"
+            type="date"
+            value-format="yyyy-MM-dd"
+            placeholder="请选择修改时间">
+          </date-picker>
+        </form-item>
+      </form-container>
+      <div slot="footer" class="dialog-footer">
+        <button type="primary" @click="processFormSubmission">确 定</button>
+        <button @click="dismissDialog">取 消</button>
+      </div>
+    </dialog-modal>
+  </div>
+</template>
+<script>
+import { listChainOpt, fetchChainOpt, removeChainOpt, createChainOpt, modifyChainOpt } from "@/api/chain_opt";
+export default {
+  name: "ChainOpt",
+  data() {
+    return {
+      isLoading: true,
+      totalItems: 0,
+      // 数据来源
+      chainOptList: [],
+      dialogOpen: false,
+      // 搜索参数
+      searchParams: {
+        pageNum: 1,
+        pageSize: 8,
+        chainNode: null,
+        stockCount: null,
+        cycleDays: null,
+        expense: null,
+        efficiencyScore: null,
+        riskLevel: null,
+        suggestion: null,
+        reviewDate: null,
+        modificationTime: null
+      },
+      // 表单数据
+      editForm: {},
+      // 表单验证规则
+      validationRules: {
+        chainNode: [
+          { required: true, message: "节点不能为空", trigger: "blur" }
+        ],
+        stockCount: [
+          { required: true, message: "存量数量不能为空", trigger: "blur" }
+        ],
+        cycleDays: [
+          { required: true, message: "周期(天)不能为空", trigger: "blur" }
+        ],
+        expense: [
+          { required: true, message: "费用不能为空", trigger: "blur" }
+        ]
+      }
+    };
+  },
+  created() {
+    this.fetchList();
+  },
+  methods: {
+    // 获取数据列表
+    fetchList() {
+      this.isLoading = true;
+      listChainOpt(this.searchParams).then(response => {
+        this.chainOptList = response.rows;
+        this.totalItems = response.total;
+        this.isLoading = false;
+      });
+    },
+    // 取消操作
+    dismissDialog() {
+      this.dialogOpen = false;
+      this.clearFields();
+    },
+    // 重置表单
+    clearFields() {
+      this.editForm = {
+        id: null,
+        chainNode: null,
+        stockCount: null,
+        cycleDays: null,
+        expense: null,
+        efficiencyScore: null,
+        riskLevel: null,
+        suggestion: null,
+        reviewDate: null,
+        modificationTime: null
+      };
+      this.resetForm("form");
+    },
+    // 查找操作
+    executeSearch() {
+      this.searchParams.pageNum = 1;
+      this.fetchList();
+    },
+    // 重置查询
+    clearQuery() {
+      this.resetForm("searchForm");
+      this.executeSearch();
+    },
+    // 选中数据处理
+    handleSelectionChange(selected) {
+      this.selectedIds = selected.map(item => item.id);
+      this.isSingleSelect = selected.length === 1;
+      this.isMultipleSelect = selected.length === 0;
+    },
+    // 初始添加操作
+    initiateAdd() {
+      this.clearFields();
+      this.dialogOpen = true;
+      this.dialogTitle = "添加优化";
+    },
+    // 初始编辑操作
+    initiateEdit(item) {
+      this.clearFields();
+      const id = item.id || this.selectedIds;
+      fetchChainOpt(id).then(response => {
+        this.editForm = response.data;
+        this.dialogOpen = true;
+        this.dialogTitle = "编辑优化";
+      });
+    },
+    // 提交表单
+    processFormSubmission() {
+      this.$refs["form"].validate(valid => {
+        if (valid) {
+          if (this.editForm.id != null) {
+            modifyChainOpt(this.editForm).then(() => {
+              this.$modal.msgSuccess("编辑完成");
+              this.dialogOpen = false;
+              this.fetchList();
+            });
+          } else {
+            createChainOpt(this.editForm).then(() => {
+              this.$modal.msgSuccess("成功添加");
+              this.dialogOpen = false;
+              this.fetchList();
+            });
+          }
+        }
+      });
+    },
+    // 删除操作
+    initiateDelete(item) {
+      const ids = item.id || this.selectedIds;
+      this.$modal.confirm('确认删除编号为"' + ids + '"的记录？').then(() => {
+        return removeChainOpt(ids);
+      }).then(() => {
+        this.fetchList();
+        this.$modal.msgSuccess("删除成功");
+      }).catch(() => { });
+    },
+    exportData() {
+      this.download('${moduleName}/chain_opt/export', {
+        ...this.searchParams
+      }, `chain_opt_${new Date().getTime()}.xlsx`)
+    }
+  }
+};
+</script>
+from datetime import datetime
+from typing import List, Optional
+from com.common.annotation import Excel
+from com.common.core.domain import BaseEntity, TreeEntity
+from com.common.utils import ToStringBuilder, ToStringStyle
+class SupplyChainOpt(BaseEntity if true or false else TreeEntity):
+    """
+    供应链优化对象 supply_chain_opt
+    """
+    serial_version_UID: int = 1  # 序列化版本UID
+    def __init__(self):
+        super().__init__()
+        # 初始化字段
+        self.id: Optional[Long] = None
+        self.supplyNode: Optional[String] = None
+        self.inventoryLevel: Optional[Long] = None
+        self.leadTimeDays: Optional[Long] = None
+        self.cost: Optional[BigDecimal] = None
+        self.performanceScore: Optional[BigDecimal] = None
+        self.disruptionRiskLevel: Optional[String] = None
+        self.optimizationSuggestion: Optional[String] = None
+        self.lastReviewDate: Optional[Date] = None
+        self.updatedAt: Optional[Date] = None
+    @property
+    def id(self) -> Optional[Long]:
+        """
+        获取主键ID
+        :return: Long 类型的主键ID
+        """
+        return self._id
+    @id.setter
+    def id(self, value: Optional[Long]):
+        """
+        设置主键ID
+        :param value: Long 类型的主键ID
+        """
+        self._id = value
+    @property
+    def supplyNode(self) -> Optional[String]:
+        """
+        获取供应链节点
+        :return: String 类型的供应链节点
+        """
+        return self._supplyNode
+    @supplyNode.setter
+    def supplyNode(self, value: Optional[String]):
+        """
+        设置供应链节点
+        :param value: String 类型的供应链节点
+        """
+        self._supplyNode = value
+    @property
+    def inventoryLevel(self) -> Optional[Long]:
+        """
+        获取库存水平
+        :return: Long 类型的库存水平
+        """
+        return self._inventoryLevel
+    @inventoryLevel.setter
+    def inventoryLevel(self, value: Optional[Long]):
+        """
+        设置库存水平
+        :param value: Long 类型的库存水平
+        """
+        self._inventoryLevel = value
+    @property
+    def leadTimeDays(self) -> Optional[Long]:
+        """
+        获取供应周期(天)
+        :return: Long 类型的供应周期(天)
+        """
+        return self._leadTimeDays
+    @leadTimeDays.setter
+    def leadTimeDays(self, value: Optional[Long]):
+        """
+        设置供应周期(天)
+        :param value: Long 类型的供应周期(天)
+        """
+        self._leadTimeDays = value
+    @property
+    def cost(self) -> Optional[BigDecimal]:
+        """
+        获取成本
+        :return: BigDecimal 类型的成本
+        """
+        return self._cost
+    @cost.setter
+    def cost(self, value: Optional[BigDecimal]):
+        """
+        设置成本
+        :param value: BigDecimal 类型的成本
+        """
+        self._cost = value
+    @property
+    def performanceScore(self) -> Optional[BigDecimal]:
+        """
+        获取性能评分
+        :return: BigDecimal 类型的性能评分
+        """
+        return self._performanceScore
+    @performanceScore.setter
+    def performanceScore(self, value: Optional[BigDecimal]):
+        """
+        设置性能评分
+        :param value: BigDecimal 类型的性能评分
+        """
+        self._performanceScore = value
+    @property
+    def disruptionRiskLevel(self) -> Optional[String]:
+        """
+        获取风险等级
+        :return: String 类型的风险等级
+        """
+        return self._disruptionRiskLevel
+    @disruptionRiskLevel.setter
+    def disruptionRiskLevel(self, value: Optional[String]):
+        """
+        设置风险等级
+        :param value: String 类型的风险等级
+        """
+        self._disruptionRiskLevel = value
+    @property
+    def optimizationSuggestion(self) -> Optional[String]:
+        """
+        获取优化建议
+        :return: String 类型的优化建议
+        """
+        return self._optimizationSuggestion
+    @optimizationSuggestion.setter
+    def optimizationSuggestion(self, value: Optional[String]):
+        """
+        设置优化建议
+        :param value: String 类型的优化建议
+        """
+        self._optimizationSuggestion = value
+    @property
+    def lastReviewDate(self) -> Optional[Date]:
+        """
+        获取最后评审日期
+        :return: Date 类型的最后评审日期
+        """
+        return self._lastReviewDate
+    @lastReviewDate.setter
+    def lastReviewDate(self, value: Optional[Date]):
+        """
+        设置最后评审日期
+        :param value: Date 类型的最后评审日期
+        """
+        self._lastReviewDate = value
+    @property
+    def updatedAt(self) -> Optional[Date]:
+        """
+        获取更新时间
+        :return: Date 类型的更新时间
+        """
+        return self._updatedAt
+    @updatedAt.setter
+    def updatedAt(self, value: Optional[Date]):
+        """
+        设置更新时间
+        :param value: Date 类型的更新时间
+        """
+        self._updatedAt = value
