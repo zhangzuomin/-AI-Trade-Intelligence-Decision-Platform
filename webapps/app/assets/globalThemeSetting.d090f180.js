@@ -1,0 +1,1 @@
+const e={loginBgColor:"linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d)",headerBgColor:"#1a2a6c",headerTextColor:"#ffffff",sidebarBgColor:"#f8f9fa",sidebarTextColor:"#343a40",tableEditColor:"#007bff",tableAddColor:"#28a745",tableViewColor:"#17a2b8",tableDeleteColor:"#dc3545"};export{e as t};
