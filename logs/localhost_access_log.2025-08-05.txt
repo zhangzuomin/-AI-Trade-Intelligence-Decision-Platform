@@ -1,0 +1,13 @@
+127.0.0.1 - - [05/Aug/2025:10:42:53 +0800] "GET /app HTTP/1.1" 302 -
+127.0.0.1 - - [05/Aug/2025:10:42:53 +0800] "GET /favicon.ico HTTP/1.1" 404 648
+127.0.0.1 - - [05/Aug/2025:10:42:53 +0800] "GET /favicon.ico HTTP/1.1" 404 648
+127.0.0.1 - - [05/Aug/2025:10:42:57 +0800] "GET /app/ HTTP/1.1" 200 567
+127.0.0.1 - - [05/Aug/2025:10:42:57 +0800] "GET /app/assets/index.adcfef33.css HTTP/1.1" 200 325454
+127.0.0.1 - - [05/Aug/2025:10:42:57 +0800] "GET /app/assets/index.a12fc34e.js HTTP/1.1" 200 1490160
+127.0.0.1 - - [05/Aug/2025:10:42:57 +0800] "GET /app/assets/login.967e02c2.js HTTP/1.1" 200 4962
+127.0.0.1 - - [05/Aug/2025:10:42:57 +0800] "GET /app/assets/el-checkbox.7445f51b.js HTTP/1.1" 200 14973
+127.0.0.1 - - [05/Aug/2025:10:42:57 +0800] "GET /app/assets/el-form-item.d72fe0e3.js HTTP/1.1" 200 35528
+127.0.0.1 - - [05/Aug/2025:10:42:57 +0800] "GET /app/assets/index.c4a10907.js HTTP/1.1" 200 6186
+127.0.0.1 - - [05/Aug/2025:10:42:57 +0800] "GET /app/assets/el-link.8baf5fdd.js HTTP/1.1" 200 1153
+127.0.0.1 - - [05/Aug/2025:10:42:57 +0800] "GET /app/assets/globalThemeSetting.cbff6c44.js HTTP/1.1" 200 286
+127.0.0.1 - - [05/Aug/2025:10:42:57 +0800] "GET /app/assets/el-input.b02b135c.js HTTP/1.1" 200 11889
